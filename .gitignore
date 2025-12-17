@@ -1,0 +1,74 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Environment directories
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Airflow
+airflow-scheduler.log
+airflow-webserver.log
+logs/
+dags/__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker cache 
+docker/logs/
+docker/minio/
+docker/postgres/
+docker/postgres/ 
+
+
+# DBT cache 
+banking_dbt/.dbt/
+banking_dbt/analysis/
+banking_dbt/target/
+banking_dbt/dbt_modules/
+banking_dbt/seeds/
+banking_dbt/logs/
+banking_dbt/.pytest_cache/
+banking_dbt/macros/
+banking_dbt/tests/
+
+# Misc
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
