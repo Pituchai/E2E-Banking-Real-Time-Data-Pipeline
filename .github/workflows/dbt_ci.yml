@@ -1,14 +1,21 @@
-name: CI
+name: dbt CI/CD
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main ]
+    paths:
+      - 'banking_dbt/**'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'banking_dbt/**'
 
 jobs:
-  dbt-test:
+  # CI: Run on Pull Requests - test in isolated schema
+  dbt-ci:
+    name: dbt CI (Test)
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -18,12 +25,64 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install dbt-snowflake==1.7.0
+      - name: Install dbt
+        run: pip install dbt-snowflake==1.7.0
 
-      - name: Setup dbt profile
+      - name: Setup dbt profile (CI)
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          CI_SCHEMA: CI_PR_${{ github.event.pull_request.number }}
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<EOF
+          banking_dbt:
+            target: ci
+            outputs:
+              ci:
+                type: snowflake
+                account: "${SNOWFLAKE_ACCOUNT}"
+                user: "${SNOWFLAKE_USER}"
+                password: "${SNOWFLAKE_PASSWORD}"
+                role: ACCOUNTADMIN
+                database: banking
+                warehouse: COMPUTE_WH
+                schema: ${CI_SCHEMA}
+                threads: 4
+          EOF
+          sed -i 's/^          //' ~/.dbt/profiles.yml
+
+      - name: dbt deps
+        run: cd banking_dbt && dbt deps
+
+      - name: dbt build (CI)
+        run: |
+          cd banking_dbt
+          echo "Testing in schema: CI_PR_${{ github.event.pull_request.number }}"
+          dbt build
+
+      - name: dbt test
+        run: cd banking_dbt && dbt test
+
+  # CD: Run on merge to main - deploy to production
+  dbt-cd:
+    name: dbt CD (Deploy)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dbt
+        run: pip install dbt-snowflake==1.7.0
+
+      - name: Setup dbt profile (Production)
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
@@ -32,9 +91,9 @@ jobs:
           mkdir -p ~/.dbt
           cat > ~/.dbt/profiles.yml <<EOF
           banking_dbt:
-            target: dev
+            target: prod
             outputs:
-              dev:
+              prod:
                 type: snowflake
                 account: "${SNOWFLAKE_ACCOUNT}"
                 user: "${SNOWFLAKE_USER}"
@@ -47,17 +106,30 @@ jobs:
           EOF
           sed -i 's/^          //' ~/.dbt/profiles.yml
 
-      - name: dbt debug
-        run: |
-          cd banking_dbt
-          dbt debug
-
       - name: dbt deps
-        run: |
-          cd banking_dbt
-          dbt deps
+        run: cd banking_dbt && dbt deps
 
-      - name: dbt compile
+      - name: dbt snapshot (SCD Type 2)
         run: |
           cd banking_dbt
-          dbt compile
+          echo "Running snapshots in production..."
+          dbt snapshot
+
+      - name: dbt run (Deploy models)
+        run: |
+          cd banking_dbt
+          echo "Deploying models to production..."
+          dbt run
+
+      - name: dbt test
+        run: cd banking_dbt && dbt test
+
+      - name: dbt docs generate
+        run: cd banking_dbt && dbt docs generate
+
+      - name: Upload dbt docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs
+          path: banking_dbt/target/
+          retention-days: 30
