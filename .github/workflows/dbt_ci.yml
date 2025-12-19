@@ -32,32 +32,37 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Create dbt profiles.yml
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          CI_SCHEMA: CI_PR_${{ github.run_id }}
         run: |
-          cat > banking_dbt/profiles.yml << 'PROFILES'
+          cat > banking_dbt/profiles.yml <<EOF
           banking_dbt:
             target: ci
             outputs:
               ci:
                 type: snowflake
-                account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
-                user: "${{ secrets.SNOWFLAKE_USER }}"
-                password: "${{ secrets.SNOWFLAKE_PASSWORD }}"
+                account: "${SNOWFLAKE_ACCOUNT}"
+                user: "${SNOWFLAKE_USER}"
+                password: "${SNOWFLAKE_PASSWORD}"
                 role: ACCOUNTADMIN
                 database: BANKING
                 warehouse: COMPUTE_WH
-                schema: CI_PR_${{ github.run_id }}
+                schema: ${CI_SCHEMA}
                 threads: 4
               prod:
                 type: snowflake
-                account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
-                user: "${{ secrets.SNOWFLAKE_USER }}"
-                password: "${{ secrets.SNOWFLAKE_PASSWORD }}"
+                account: "${SNOWFLAKE_ACCOUNT}"
+                user: "${SNOWFLAKE_USER}"
+                password: "${SNOWFLAKE_PASSWORD}"
                 role: ACCOUNTADMIN
                 database: BANKING
                 warehouse: COMPUTE_WH
                 schema: analytics
                 threads: 4
-          PROFILES
+          EOF
           sed -i 's/^          //' banking_dbt/profiles.yml
 
       - name: Verify dbt installation
