@@ -77,9 +77,13 @@ def load_to_snowflake(**kwargs) :
             cur.execute(f"PUT file://{f} @%{table}")
             print(f"Uploaded {f} -> @{table} stage")
 
+        # Use COPY INTO with LOAD_TIMESTAMP column
         copy_sql = f"""
-        COPY INTO {table}
-        FROM @%{table}
+        COPY INTO {table} (V, LOAD_TIMESTAMP)
+        FROM (
+            SELECT $1, CURRENT_TIMESTAMP()
+            FROM @%{table}
+        )
         FILE_FORMAT=(TYPE=PARQUET)
         ON_ERROR='CONTINUE'
         """
