@@ -31,6 +31,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Debug secrets (check if set)
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          echo "Account length: ${#SNOWFLAKE_ACCOUNT}"
+          echo "User length: ${#SNOWFLAKE_USER}"
+          echo "Password length: ${#SNOWFLAKE_PASSWORD}"
+          echo "Account starts with: ${SNOWFLAKE_ACCOUNT:0:3}..."
+
       - name: Create dbt profiles.yml
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
