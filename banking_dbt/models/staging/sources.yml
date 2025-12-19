@@ -1,0 +1,10 @@
+version: 2
+# where we will get the data from (raw layer)
+sources:
+  - name: raw
+    database: banking
+    schema: raw
+    tables:
+      - name: customers
+      - name: accounts
+      - name: transactions
