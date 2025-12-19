@@ -33,16 +33,15 @@ jobs:
 
       - name: Create dbt profiles.yml
         run: |
-          mkdir -p ~/.dbt
-          cat <<EOF > ~/.dbt/profiles.yml
+          cat > banking_dbt/profiles.yml << 'PROFILES'
           banking_dbt:
             target: ci
             outputs:
               ci:
                 type: snowflake
-                account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-                user: ${{ secrets.SNOWFLAKE_USER }}
-                password: ${{ secrets.SNOWFLAKE_PASSWORD }}
+                account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+                user: "${{ secrets.SNOWFLAKE_USER }}"
+                password: "${{ secrets.SNOWFLAKE_PASSWORD }}"
                 role: ACCOUNTADMIN
                 database: BANKING
                 warehouse: COMPUTE_WH
@@ -50,15 +49,16 @@ jobs:
                 threads: 4
               prod:
                 type: snowflake
-                account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-                user: ${{ secrets.SNOWFLAKE_USER }}
-                password: ${{ secrets.SNOWFLAKE_PASSWORD }}
+                account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+                user: "${{ secrets.SNOWFLAKE_USER }}"
+                password: "${{ secrets.SNOWFLAKE_PASSWORD }}"
                 role: ACCOUNTADMIN
                 database: BANKING
                 warehouse: COMPUTE_WH
                 schema: analytics
                 threads: 4
-          EOF
+          PROFILES
+          sed -i 's/^          //' banking_dbt/profiles.yml
 
       - name: Verify dbt installation
         run: dbt --version
