@@ -40,9 +40,9 @@ jobs:
                 user: "${SNOWFLAKE_USER}"
                 password: "${SNOWFLAKE_PASSWORD}"
                 role: ACCOUNTADMIN
-                database: BANKING
+                database: banking
                 warehouse: COMPUTE_WH
-                schema: ANALYTICS
+                schema: analytics
                 threads: 4
           EOF
           sed -i 's/^          //' ~/.dbt/profiles.yml
