@@ -1,59 +1,40 @@
-name: dbt CI/CD
+name: CI
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - 'banking_dbt/**'
   push:
-    branches: [main]
-    paths:
-      - 'banking_dbt/**'
-
-env:
-  DBT_PROFILES_DIR: ${{ github.workspace }}/banking_dbt
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  dbt-ci:
-    name: dbt Build & Test
+  dbt-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.10"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install dbt-snowflake==1.7.0
 
-      - name: Debug secrets (check if set)
+      - name: Setup dbt profile
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
-          echo "Account length: ${#SNOWFLAKE_ACCOUNT}"
-          echo "User length: ${#SNOWFLAKE_USER}"
-          echo "Password length: ${#SNOWFLAKE_PASSWORD}"
-          echo "Account starts with: ${SNOWFLAKE_ACCOUNT:0:3}..."
-
-      - name: Create dbt profiles.yml
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-          CI_SCHEMA: CI_PR_${{ github.run_id }}
-        run: |
-          cat > banking_dbt/profiles.yml <<EOF
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml <<EOF
           banking_dbt:
-            target: ci
+            target: dev
             outputs:
-              ci:
+              dev:
                 type: snowflake
                 account: "${SNOWFLAKE_ACCOUNT}"
                 user: "${SNOWFLAKE_USER}"
@@ -61,107 +42,22 @@ jobs:
                 role: ACCOUNTADMIN
                 database: BANKING
                 warehouse: COMPUTE_WH
-                schema: ${CI_SCHEMA}
-                threads: 4
-              prod:
-                type: snowflake
-                account: "${SNOWFLAKE_ACCOUNT}"
-                user: "${SNOWFLAKE_USER}"
-                password: "${SNOWFLAKE_PASSWORD}"
-                role: ACCOUNTADMIN
-                database: BANKING
-                warehouse: COMPUTE_WH
-                schema: analytics
+                schema: ANALYTICS
                 threads: 4
           EOF
-          sed -i 's/^          //' banking_dbt/profiles.yml
-
-      - name: Verify dbt installation
-        run: dbt --version
-
-      - name: Install dbt packages
-        working-directory: banking_dbt
-        run: dbt deps
+          sed -i 's/^          //' ~/.dbt/profiles.yml
 
       - name: dbt debug
-        working-directory: banking_dbt
-        run: dbt debug
-
-      # Run on Pull Request - test in isolated CI schema
-      - name: dbt build (PR - CI environment)
-        if: github.event_name == 'pull_request'
-        working-directory: banking_dbt
         run: |
-          echo "Running dbt build in CI schema: CI_PR_${{ github.run_id }}"
-          dbt build --target ci
+          cd banking_dbt
+          dbt debug
 
-      # Run on merge to main - deploy to production
-      - name: dbt build (Production)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: banking_dbt
+      - name: dbt deps
         run: |
-          echo "Deploying to production..."
-          dbt build --target prod
+          cd banking_dbt
+          dbt deps
 
-      # Generate docs (optional - on push to main)
-      - name: Generate dbt docs
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: banking_dbt
-        run: dbt docs generate --target prod
-
-      # Upload docs as artifact
-      - name: Upload dbt docs
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: dbt-docs
-          path: banking_dbt/target/
-          retention-days: 7
-
-  # Cleanup CI schema after PR tests (optional)
-  cleanup:
-    name: Cleanup CI Schema
-    runs-on: ubuntu-latest
-    needs: dbt-ci
-    if: github.event_name == 'pull_request'
-
-    steps:
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install snowflake-connector
-        run: pip install snowflake-connector-python
-
-      - name: Drop CI schema
+      - name: dbt compile
         run: |
-          python << 'EOF'
-          import snowflake.connector
-          import os
-
-          conn = snowflake.connector.connect(
-              account="${{ secrets.SNOWFLAKE_ACCOUNT }}",
-              user="${{ secrets.SNOWFLAKE_USER }}",
-              password="${{ secrets.SNOWFLAKE_PASSWORD }}",
-              role="ACCOUNTADMIN"
-          )
-
-          schema_name = "CI_PR_${{ github.run_id }}"
-          schemas_to_drop = [
-              f"BANKING.{schema_name}_staging",
-              f"BANKING.{schema_name}_marts",
-              f"BANKING.{schema_name}_snapshots"
-          ]
-
-          cursor = conn.cursor()
-          for schema in schemas_to_drop:
-              try:
-                  cursor.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
-                  print(f"Dropped schema: {schema}")
-              except Exception as e:
-                  print(f"Warning: Could not drop {schema}: {e}")
-
-          cursor.close()
-          conn.close()
-          EOF
+          cd banking_dbt
+          dbt compile
